@@ -10,6 +10,9 @@ var sqlite3 = require("sqlite3");
 var staticAlias = require("node-static-alias");
 
 /***************************************** */
+
+var app = express();
+
 const DB_PATH = path.join(__dirname, "my.db");
 const WEB_PATH  = path.join(__dirname, "public");
 const HTTP_PORT = 8090;
@@ -31,55 +34,48 @@ var SQL3 = {
     exec: util.promisify(myDB.exec.bind(myDB)),
 };
 
-var fileServer = new staticAlias.Server(WEB_PATH,{
-    cache: 100,
-    serverInfo: "Node workshop ex05",
-    alias: [
-        {
-			match: /^\/(?:index\/?)?(?:[?#].*$)?$/,
-			serve: "index.html",
-			force: true,
-		},
-		{
-			match: /^\/js\/.+$/,
-			serve: "<% absPath %>",
-			force: true,
-		},
-		{
-			match: /^\/(?:[\w\d]+)(?:[\/?#].*$)?$/,
-			serve: function onMatch(params) {
-				return `${params.basename}.html`;
-			},
-		},
-		{
-			match: /[^]/,
-			serve: "404.html",
-		},
-    ],
-});
-
-var httpserv  = http.createServer(handleRequest);
+var httpserv  = http.createServer(app);
 
 main();
 
 function main(){
+    definesRoutes();
     httpserv.listen(HTTP_PORT);
     console.log(`Listeen on httpss://localhost: ${HTTP_PORT}`);
 }
 
-async function handleRequest(req, res){
-    if (req.url == "/get-users"){
-        delay(1000);
-        let users = await getAllRecords();
-
+function definesRoutes(){
+    app.get("/get-users",async function (req, res){
+        var users = await getAllRecords();
         res.writeHead(200, {
-            "Content-Type": "application/json",
+            "Content-Type": "applicatiom/json",
             "Cache-Control": "no-cache"
         });
         res.end(JSON.stringify(users));
-    }else{
-        fileServer.serve(req, res);
-    }
+    });
+
+    app.use(function(req, res, next){
+        if (/^\/(?:index\/?)?(?:[?#].*$)?$/.test(req.url)){
+            req.url = "/index.html";
+        }
+        else if(/^\/js\/.+$/.test(req.url)){
+            next();
+            return;
+        }else if (/^\/(?:[\w\d]+)(?:[\/?#].*$)?$/.test(req.url)){
+            let [,basename] = req.url.match(/^\/(?:[\w\d]+)(?:[\/?#].*$)?$/);
+            req.url = `${basename}.html`;
+        }else{
+            req.url = "/404.html";
+        }
+        next();
+    });
+
+    app.use(express.static(WEB_PATH, {
+        maxAge: 100,
+        setHeaders: function setHeaders(res){
+            res.setHeader("Server", "Node workshop: ex5")
+        }
+    }));
 }
 
 async function getAllRecords(){
